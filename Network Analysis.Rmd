@@ -1,0 +1,241 @@
+---
+title: "Network_Analysis"
+author: "Yuki Ao 474878"
+date: "5/25/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Table Aggregation
+```{r,xls package}
+library(readxl)
+library(tidyverse)
+
+setwd("~/Documents/GRADUATE STUDIES/projects/Social Dining Project")
+
+```
+
+```{r,read in multiple sheets}
+sheet.index <- 1:9
+data.list <- list()
+for (i in sheet.index)
+  data.list[[i]] <- read_excel("Transactions_r.xls",
+                              sheet = i)
+```
+
+```{r, concat multiple tables together as one transaction matrix}
+full_data <- data.list[[1]]
+for (i in 2:9)
+  full_data <- rbind(full_data,data.list[[i]])
+
+View(full_data)
+```
+
+```{r,extract dates}
+library(lubridate)
+names(full_data) <- c("id","terminal","num","datetime")
+datetime <- full_data$datetime
+date <- date(datetime)
+```
+
+```{r,output}
+trans_demo <- read.csv("transactions_demo.csv")
+trans_demo <- trans_demo[-c(5)]
+names(trans_demo) <- c("id","terminal","num",
+                       "datetime","PrimeDiv",
+                       "StdtLevel","sex",
+                       "hispanic","Nativeam",
+                       "Asian","black",
+                       "NHPacific","white",
+                       "nralien","nr")
+trans_demo["date"] <- date
+trans_demo["datetime"] <- datetime
+trans_demo
+```
+
+
+```{r,output}
+write.csv(trans_demo,"transactions_w_demo.csv",row.names = F,quote = F)
+```
+
+```{r,filter terminal}
+delici_index <- grep(pattern = "DeliciOSO",trans_demo$terminal)
+delici_trans_demo <- trans_demo[delici_index,]
+rownames(delici_trans_demo) <- NULL
+delici_trans_demo
+```
+
+```{r,delicio output}
+write.csv(delici_trans_demo,"delici_trans_demo.csv",row.names = F,quote = F)
+```
+
+```{r}
+delici_trans_demo$datetime[length(delici_trans_demo$datetime)]
+```
+
+```{r,2015 data}
+delici_1408_1502 <- delici_trans_demo[delici_trans_demo$date>"2014-08-21",]
+rownames(delici_1408_1502) <- NULL
+dates <- unique(delici_1408_1502$date)
+
+get_ymd <- function(d){
+  string <- as.character(d)
+  year <- substr(d,start = 1,stop = 4)
+  month <- substr(d,start=6,stop = 7)
+  day <- substr(d,start = 9,stop = 10)
+  return(c(year,month,day))
+}
+
+output_df <- NULL
+
+for (i in 1:length(dates)){
+  ## the file name is one day later than the data within
+  ori_d <- dates[i]
+  d <- as.Date(dates[i])+1
+
+  ymd <- get_ymd(d) 
+  ymd <- paste(ymd[2],ymd[3],ymd[1],sep = "-")
+  
+  ## find item filename using ymd
+  file_name <- NULL
+  file_name <- paste("items","svrB",ymd,sep = "_") %>% paste0(".csv")
+  
+  ## read item file
+  item_df <- NULL
+  item_df <- read.csv(paste0("Items/",file_name),header = F)
+  
+  
+  item_product <- NULL
+  item_product <- cbind(item_df$V4,as.character(item_df$V6),item_df$V7,item_df$V8)
+  item_product <- data.frame(item_product)
+  colnames(item_product) <- c("num","product","quantity","price")
+  item_product$date <- as.Date(item_df$V2,"%m/%d/%Y")
+  item_product$num <- as.numeric(as.character(item_product$num))
+  item_product$quantity <- as.numeric(as.character(item_product$quantity))
+  item_product$price <- as.numeric(as.character(item_product$price))
+  #item_product$quantity <- ifelse(item_product$quantity<0,-1*item_product$quantity,item_product$quantity)
+  #item_product$price <- ifelse(item_product$price<0,-1*item_product$price,item_product$price)
+  
+  output_df <- rbind(output_df,
+                     right_join(delici_1408_1502,
+                               item_product,
+                               by=c("num","date")))
+}
+output_df <- output_df[is.na(output_df$id)==F,]
+rownames(output_df) <- NULL
+
+View(output_df)
+```
+
+```{r}
+write_csv(output_df,"trans_demo_items_1408_1502.csv",quote = F)
+```
+
+```{r}
+order <- sort(unique(output_df$product))
+View(order)
+write_csv(as.data.frame(order),"order_products.csv",quote=F)
+```
+
+List.files: https://stat.ethz.ch/R-manual/R-devel/library/base/html/list.files.html
+```{r,2013-2014 data}
+filenames <- list.files(paste0(getwd(),"/Items"),
+                        pattern = "^(items_DUC_)")
+
+delici_13_14 <- delici_trans_demo[delici_trans_demo$date<="2014-08-21",]
+rownames(delici_13_14) <- NULL
+output_df2 <- NULL
+
+for (file in filenames){
+  ## read item file
+  print(file)
+  item_df <- read_excel(paste0("Items/",file))
+  
+  item_product <- NULL
+  item_product <- cbind(item_df[2],item_df[4],item_df[5],item_df[6],item_df[7])
+  colnames(item_product) <- c("date","num","product","quantity","price")
+  item_product$date <- as.Date(item_product$date)
+
+  output_df2 <- rbind(output_df2,right_join(delici_13_14,
+                                            item_product,
+                                            by=c("num","date")))
+}
+
+output_df2 <- output_df2[is.na(output_df2$id)==F,]
+rownames(output_df2) <- NULL
+output_df2 <- rbind(output_df2,output_df)
+output_df2 <- output_df2[order(output_df2$date),]
+rownames(output_df2) <- NULL
+
+View(output_df2)
+```
+
+```{r}
+write_csv(output_df2,"trans_demo_items_all.csv",quote = F)
+```
+
+```{r}
+
+```
+
+
+```{r}
+library(dplyr)
+
+group_df <- group_by(output_df2,product)
+tally(group_df)
+```
+
+
+# Network Analysis
+1. http://www.sthda.com/english/articles/33-social-network-analysis/136-network-analysis-and-manipulation-using-r/
+```{r}
+library(tidyverse)
+library(tidygraph)
+library(ggraph)
+```
+
+2. https://www.mjdenny.com/Preparing_Network_Data_In_R.html
+```{r}
+library(statnet)
+library(network)
+
+delici_trans_demo <- read.csv("delici_trans_demo.csv")
+```
+
+```{r}
+num_of_ppl <- length(unique(delici_trans_demo$id))
+num_nodes <- num_of_ppl
+
+my_sociomatrix <- matrix(round(runif(num_nodes*num_nodes)),
+                         nrow=num_nodes,
+                         ncol=num_nodes)
+
+## no self-edges in the network; diagonal num are all 0
+diag(my_sociomatrix) <- 0
+```
+
+```{r}
+net <- as.network(x=my_sociomatrix,
+                  directed=TRUE,
+                  loops=FALSE,
+                  matrix.type = "adjacency")
+```
+
+```{r}
+network.vertex.names(net) <- delici_trans_demo$id
+
+set.vertex.attribute(net,
+                     "Gender",
+                     delici_trans_demo$sex)
+```
+
+
+
+
+
+
+
