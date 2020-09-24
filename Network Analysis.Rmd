@@ -144,7 +144,7 @@ List.files: https://stat.ethz.ch/R-manual/R-devel/library/base/html/list.files.h
 ```{r,2013-2014 data}
 filenames <- list.files(paste0(getwd(),"/Items"),
                         pattern = "^(items_DUC_)")
-
+filenames
 delici_13_14 <- delici_trans_demo[delici_trans_demo$date<="2014-08-21",]
 rownames(delici_13_14) <- NULL
 output_df2 <- NULL
@@ -174,19 +174,50 @@ View(output_df2)
 ```
 
 ```{r}
+item_df <- read_excel(paste0("Items/",filenames[6]))
+  
+item_product <- NULL
+item_product <- cbind(item_df[2],item_df[4],item_df[5],item_df[6],item_df[7])
+colnames(item_product) <- c("date","num","product","quantity","price")
+item_product$date <- as.Date(item_product$date)
+
+test <- rbind(test,right_join(delici_13_14,item_product,
+                                            by=c("num","date")))
+test
+```
+
+
+```{r}
 write_csv(output_df2,"trans_demo_items_all.csv",quote = F)
 ```
 
-```{r}
 
-```
 
 
 ```{r}
 library(dplyr)
+df <- read_csv("trans_demo_items_all_neg_dropped.csv")
+View(df)
+df$product <- gsub(",","",df$product)
 
-group_df <- group_by(output_df2,product)
-tally(group_df)
+n_product <- df %>% 
+  group_by(product) %>% 
+  summarise(n=n(),days=length(unique(date)))
+n_product
+
+
+n_date <- df %>% 
+  group_by(product,date) %>% 
+  summarise(date_n=n())
+
+n_date
+
+```
+
+```{r}
+write.csv(n_product,"n_product.csv",quote=F,row.names = F)
+write.csv(n_date,"n_date.csv",quote=F,row.names = F)
+
 ```
 
 
